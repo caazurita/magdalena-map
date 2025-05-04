@@ -6,6 +6,7 @@ from keplergl import KeplerGl
 import requests
 import json
 # Título de la app
+st.set_page_config(layout="wide")
 st.title("Rutas y puntos de detención frecuentes")
 vista = st.radio("Seleccionar vista:", ["Rutas frecuentes", "Puntos frecuentes"])
 
@@ -313,7 +314,7 @@ if response.status_code == 200:
         }
     }
     from keplergl import KeplerGl
-    mapa = KeplerGl(height=700)
+    mapa = KeplerGl(height=700 , width=1000)
     mapa.add_data(data=geojson_filtrado, name=dataId)
     mapa.config = config
     keplergl_static(mapa)
