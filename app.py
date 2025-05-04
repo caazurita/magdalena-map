@@ -4,7 +4,6 @@ import pandas as pd
 import json
 from keplergl import KeplerGl
 import requests
-import random
 import json
 # Título de la app
 st.title("Rutas y puntos de detención frecuentes")
@@ -13,8 +12,6 @@ vista = st.radio("Seleccionar vista:", ["Rutas frecuentes", "Puntos frecuentes"]
 # Carga el archivo GeoJSON
 # geojson_file = st.file_uploader("Sube un archivo GeoJSON", type="geojson")
 responseData = None
-def get_random_color():
-    return [random.randint(0, 255) for _ in range(3)]
 def toGeoJsonRoute(data):
     geojson = {
         "type": "FeatureCollection",
@@ -47,8 +44,8 @@ def toGeoJsonRoute(data):
         }
 
         geojson["features"].append(feature)
-        with open("rutas_frecuentes.geojson", "w", encoding="utf-8") as f:
-            json.dump(geojson, f, ensure_ascii=False, indent=2)
+        # with open("rutas_frecuentes.geojson", "w", encoding="utf-8") as f:
+        #     json.dump(geojson, f, ensure_ascii=False, indent=2)
     
     return geojson
 
