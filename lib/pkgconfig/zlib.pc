@@ -1,0 +1,13 @@
+prefix=/opt/anaconda3/envs/mag-map
+exec_prefix=/opt/anaconda3/envs/mag-map
+libdir=/opt/anaconda3/envs/mag-map/lib
+sharedlibdir=/opt/anaconda3/envs/mag-map/lib
+includedir=/opt/anaconda3/envs/mag-map/include
+
+Name: zlib
+Description: zlib compression library
+Version: 1.2.13
+
+Requires:
+Libs: -L${libdir} -L${sharedlibdir} -lz
+Cflags: -I${includedir}
