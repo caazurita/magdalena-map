@@ -5,14 +5,21 @@ import json
 from keplergl import KeplerGl
 import requests
 import json
+from datetime import datetime
 # Título de la app
-st.set_page_config(layout="wide")
+# st.set_page_config(layout="wide")
 st.title("Rutas y puntos de detención frecuentes")
-vista = st.radio("Seleccionar vista:", ["Rutas frecuentes", "Puntos frecuentes"])
+
+
 
 # Carga el archivo GeoJSON
 # geojson_file = st.file_uploader("Sube un archivo GeoJSON", type="geojson")
 responseData = None
+
+def format_minutes(value):
+    hours = value // 60
+    minutes = value % 60
+    return f"{int(hours)}h {int(minutes)}m" if hours else f"{int(minutes)}m"
 def toGeoJsonRoute(data):
     geojson = {
         "type": "FeatureCollection",
@@ -20,7 +27,7 @@ def toGeoJsonRoute(data):
     }
     for item in data:
         route = item.get("route", [])
-        coordinates = [(lon, lat) for lon, lat, _, _ in route]
+        coordinates = [(lon, lat) for lon, lat in route]
 
         # Crea el objeto Feature de tipo LineString
         feature = {
@@ -30,7 +37,7 @@ def toGeoJsonRoute(data):
                 "coordinates": coordinates
             },
             "properties": {
-                "id": item.get("id"),
+                "id": item.get("reference"),
                 "frequency": item.get("frequency"),
                 "transportUnit": [
                     unit[list(unit.keys())[0]]["plate"] for unit in item.get("transportUnit", [])
@@ -40,7 +47,8 @@ def toGeoJsonRoute(data):
                 ],
                 "averageTravelTimeInMin": item.get("averageTravelTimeInMin"),
                 "lastUpdated": item.get("lastUpdated"),
-                "color_category": item.get("id"),
+                "color_category": item.get("reference"),
+                "lastUpdated": item.get("lastUpdated"),
             }
         }
 
@@ -64,7 +72,7 @@ def toGeoJsonStops(data):
                 "coordinates": [lon, lat]
             },
             "properties": {
-                "id": item.get("id"),
+                "id": item.get("reference"),
                 "frequency": item.get("frequency"),
                 "transportUnit": [
                     unit[list(unit.keys())[0]]["plate"] for unit in item.get("transportUnits", [])
@@ -74,7 +82,8 @@ def toGeoJsonStops(data):
                 ],
                 "averageStoppedInMin": item.get("averageStoppedInMin"),
                 "coverageRadius": item.get("coverageRadius"),
-                "color_category": item.get("id")
+                "color_category": item.get("reference"),
+                "lastUpdated": item.get("lastUpdated"),
             }
         }
         geojson["features"].append(feature)
@@ -83,8 +92,19 @@ def toGeoJsonStops(data):
 
 endpoint_url = "https://fmsstages-filestasks-1b138qf473xbw.s3.amazonaws.com/FrequentRoutesQA.json"
 response = requests.get(endpoint_url)
+
+averageStoppedInMin = 0
+
 if response.status_code == 200:
     responseData = response.json() 
+    lastUpdated = responseData["lastUpdated"]
+    date = datetime.fromisoformat(lastUpdated.replace("Z", ""))
+    formatted_date = date.strftime("%d/%m/%Y %H:%M")
+    
+    st.markdown(f"**Última actualización:** {formatted_date} UTC")
+  
+    vista = st.radio("Seleccionar vista:", ["Rutas frecuentes", "Puntos frecuentes"])
+    
     if vista == "Rutas frecuentes":
         geojson = toGeoJsonRoute(responseData["sortedFrequentRoutes"])
         total_routes = len(geojson["features"])
@@ -99,7 +119,7 @@ if response.status_code == 200:
         col1, col2, col3 = st.columns(3)
         col1.metric("Total de Rutas Frecuentes", total_routes)
         col2.metric("Suma de Frecuencias", total_frecuencias)
-        col3.metric("Duración Promedio de Rutas (min)", duracion_promedio)
+        col3.metric("Duración Promedio de Rutas", format_minutes(duracion_promedio))
          # print(json.dumps(geojson, indent=2))
         
     else:
@@ -119,10 +139,7 @@ if response.status_code == 200:
         col2.metric("Suma de Frecuencias", total_frecuencias)
         col3.metric("Duración Promedio en Paradas (min)", duracion_promedio)
 
-
-
-
-    
+        averageStoppedInMin = list({f['properties'].get('averageStoppedInMin', 'Sin frecuencia') for f in geojson["features"]})
 
     frecuency = list({f['properties'].get('frequency', 'Sin frecuencia') for f in geojson["features"]})
     plates = list({
@@ -139,6 +156,8 @@ if response.status_code == 200:
     filterByFrequecy = st.multiselect("Filtrar por frecuencia:", frecuency, default=[])
     filterByPlate = st.multiselect("Filtrar por placa:", plates, default=[])
     filterByType = st.multiselect("Filtrar por tipo de transporte:", types, default=[])
+    if averageStoppedInMin != 0:
+        averageStoppedInMin = st.slider("Filtrar por duración en min:", 0, 100, 0)
 
     # Filtrar las features
     features_filtradas = [
@@ -147,6 +166,8 @@ if response.status_code == 200:
             (not filterByFrequecy or f['properties'].get('frequency', 'Sin frecuencia') in filterByFrequecy)
             and (not filterByPlate or any(plate in filterByPlate for plate in f['properties'].get('transportUnit', [])))
             and (not filterByType or any(type_ in filterByType for type_ in f['properties'].get('types', [])))
+            and (not averageStoppedInMin or f['properties'].get('averageStoppedInMin', 'Sin frecuencia') <= averageStoppedInMin)
+            
         )
     ]
 
@@ -159,19 +180,41 @@ if response.status_code == 200:
     layer_type = "geojson" if vista == "Rutas frecuentes" else "point"
     dataId = "data_1" if vista == "Rutas frecuentes" else "data_2"
 
+
+    #format
+    if vista == "Rutas frecuentes":
+       for feature in geojson["features"]:
+            avg_min = feature["properties"].get("averageTravelTimeInMin", 0)
+            feature["properties"]["Tiempo promedio de viaje"] = format_minutes(avg_min)
+        
+    else:
+        for feature in geojson["features"]:
+            avg_min = feature["properties"].get("averageStoppedInMin", 0)
+            feature["properties"]["Tiempo promedio en paradas"] = format_minutes(avg_min)
+            feature["properties"]["Radio de cobertura promedio"] = feature["properties"]["coverageRadius"]
+    
+    #General
+    for feature in geojson["features"]:
+            feature["properties"]["Frecuencia"] = feature["properties"]["frequency"]
+            feature["properties"]["Placa"] = ", ".join(feature["properties"]["transportUnit"]) 
+            feature["properties"]["Tipo"] = ", ".join(feature["properties"]["types"])
+            feature["properties"]["Ultima actualización"] = feature["properties"]["lastUpdated"]
+
     toShow = [
         {"name": "id", "format": None},
-        {"name": "frequency", "format": None},
-        {"name": "transportUnit", "format": None},
-        {"name": "types", "format": None},
-        {"name": "averageTravelTimeInMin", "format": None},
+        {"name": "Frecuencia", "format": None},
+        {"name": "Placa", "format": None},
+        {"name": "Tipo", "format": None},
+        {"name": "Tiempo promedio de viaje", "format": None},
+        {"name": "Ultima actualización", "format": "DD/MM/YYYY HH:mm"},
     ] if vista == "Rutas frecuentes" else [
         {"name": "id", "format": None},
-        {"name": "frequency", "format": None},
-        {"name": "transportUnit", "format": None},
-        {"name": "types", "format": None},
-        {"name": "averageStoppedInMin", "format": None},
-        {"name": "coverageRadius", "format": None},
+        {"name": "Frecuencia", "format": None},
+        {"name": "Placa", "format": None},
+        {"name": "Tipo", "format": None},
+        {"name": "Tiempo promedio en paradas", "format": None},
+        {"name": "Radio de cobertura promedio", "format": None},
+        {"name": "Ultima actualización", "format": "DD/MM/YYYY HH:mm"},
     ]
 
     config = {
@@ -314,11 +357,11 @@ if response.status_code == 200:
         }
     }
     from keplergl import KeplerGl
-    mapa = KeplerGl(height=700 , width=1000)
-    mapa.add_data(data=geojson_filtrado, name=dataId)
-    mapa.config = config
-    keplergl_static(mapa)
-
+    map = KeplerGl()
+    map.add_data(data=geojson_filtrado, name=dataId)
+    map.config = config
+    keplergl_static(map,500,2000)
+    
     
 else:
     st.error("No se pudo obtener los datos del endpoint.")
